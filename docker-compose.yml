@@ -1,0 +1,40 @@
+# docker-compose.yml
+#
+# Local development only — mounts source code for hot reload.
+# Not used in production (production uses the built Docker image on ECS).
+#
+# Usage:
+#   docker compose up
+#   curl http://localhost:8000/healthz
+#   curl "http://localhost:8000/analyze?file=/app/sample-logs/2025-09-15T14-00.jsonl&threshold=3"
+
+services:
+  api:
+    build:
+      context: .
+      target: builder          # use the builder stage so we get dev deps
+    command: >
+      uvicorn log_analytics.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src          # live reload on source changes
+      - ./sample-logs:/app/sample-logs
+    environment:
+      PYTHONPATH: /app/src
+      GIT_SHA: "dev-local"
+      LOG_BUCKET: ""            # leave empty; use ?file= param for local testing
+      # Uncomment + fill in to test against real S3:
+      # AWS_ACCESS_KEY_ID: ""
+      # AWS_SECRET_ACCESS_KEY: ""
+      # AWS_DEFAULT_REGION: eu-west-1
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3

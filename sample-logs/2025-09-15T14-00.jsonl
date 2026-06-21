@@ -1,0 +1,11 @@
+{"ts":"2025-09-15T14:10:04Z","service":"api","level":"ERROR","msg":"500 internal server error","endpoint":"/checkout","latency_ms":2001}
+{"ts":"2025-09-15T14:10:07Z","service":"orders","level":"ERROR","msg":"db timeout","orderId":"o-125"}
+{"ts":"2025-09-15T14:10:09Z","service":"billing","level":"ERROR","msg":"foreign key constraint","orderId":"o-125"}
+{"ts":"2025-09-15T14:10:11Z","service":"auth","level":"ERROR","msg":"token expired","userId":"u-42"}
+{"ts":"2025-09-15T14:10:15Z","service":"api","level":"INFO","msg":"GET /health 200","latency_ms":3}
+{"ts":"2025-09-15T14:10:20Z","service":"orders","level":"INFO","msg":"order created","orderId":"o-126"}
+{"ts":"2025-09-15T14:10:22Z","service":"api","level":"WARN","msg":"slow response","latency_ms":1500}
+{"ts":"2025-09-15T14:10:25Z","service":"cache","level":"ERROR","msg":"eviction pressure high"}
+{"ts":"2025-09-15T14:10:30Z","service":"api","level":"INFO","msg":"POST /checkout 201","latency_ms":120}
+this line is intentionally malformed
+{"ts":"2025-09-15T14:10:35Z","service":"db","level":"ERROR","msg":"connection pool exhausted"}

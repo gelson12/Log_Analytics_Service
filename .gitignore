@@ -1,0 +1,32 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# Pytest
+.pytest_cache/
+test-results.xml
+
+# Ruff
+.ruff_cache/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+tfplan
+.terraform.lock.hcl
+override.tf
+override.tf.json
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
