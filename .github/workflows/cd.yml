@@ -1,11 +1,20 @@
 ################################################################################
 # .github/workflows/cd.yml
 #
-# Runs on every push to main (after a PR is merged):
+# Runs on every push to main:
 #   1. Build & push Docker image to ECR (tagged with git SHA)
 #   2. terraform plan → terraform apply
-#   3. Force a new ECS deployment so the new task definition is picked up
-#   4. Smoke-test the /version endpoint to confirm rollout
+#   3. Force new ECS deployment
+#   4. Smoke-test /version to confirm rollout
+#
+# Auth: OIDC — GitHub Actions assumes an IAM role directly.
+# No long-lived AWS keys stored anywhere.
+# Required GitHub secrets:
+#   AWS_DEPLOY_ROLE_ARN   — IAM role ARN with OIDC trust for this repo/branch
+#   VPC_ID                — target VPC
+#   PUBLIC_SUBNET_IDS     — JSON list e.g. '["subnet-aaa","subnet-bbb"]'
+#   PRIVATE_SUBNET_IDS    — JSON list e.g. '["subnet-ccc","subnet-ddd"]'
+#   LOG_BUCKETS           — JSON list e.g. '["my-log-bucket"]'
 ################################################################################
 
 name: CD
@@ -16,24 +25,23 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # OIDC — lets us assume an AWS role without long-lived keys
+  id-token: write   # required for OIDC token exchange with AWS
 
 env:
-  AWS_REGION:    eu-west-1
-  ECR_REPO:      log-analytics-prod
-  ECS_CLUSTER:   log-analytics-prod
-  ECS_SERVICE:   log-analytics-prod
+  AWS_REGION:     eu-west-1
+  ECR_REPO:       log-analytics-prod
+  ECS_CLUSTER:    log-analytics-prod
+  ECS_SERVICE:    log-analytics-prod
   TF_WORKING_DIR: terraform/environments/prod
 
 jobs:
-  # ──────────────────────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────────────
   build-and-push:
-  # ──────────────────────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────────────
     name: Build & Push Image
     runs-on: ubuntu-latest
     outputs:
-      image_uri: ${{ steps.meta.outputs.image_uri }}
-      git_sha:   ${{ steps.meta.outputs.sha_short }}
+      git_sha: ${{ steps.meta.outputs.sha_short }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +51,7 @@ jobs:
         run: |
           SHA_SHORT="${GITHUB_SHA::8}"
           echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
-          echo "Will tag image with: ${SHA_SHORT}"
+          echo "Tagging image: ${SHA_SHORT}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -55,44 +63,28 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set full image URI
-        id: image-uri
-        run: |
-          REPO_URI="${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}"
-          SHORT_SHA="${{ steps.meta.outputs.sha_short }}"
-          echo "image_uri=${REPO_URI}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          # Also update the job-level output
-          echo "image_uri=${REPO_URI}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-
-      - name: Build Docker image
+      - name: Build & push Docker image
+        env:
+          IMAGE_URI:  ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.meta.outputs.sha_short }}
+          LATEST_URI: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest
         run: |
           docker build \
             --build-arg GIT_SHA="${{ steps.meta.outputs.sha_short }}" \
-            --tag "${{ steps.image-uri.outputs.image_uri }}" \
-            --cache-from "${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest" \
+            --tag "$IMAGE_URI" \
+            --tag "$LATEST_URI" \
+            --cache-from "$LATEST_URI" \
             .
+          docker push "$IMAGE_URI"
+          docker push "$LATEST_URI"
 
-      - name: Push to ECR
-        run: |
-          docker push "${{ steps.image-uri.outputs.image_uri }}"
-          # Also tag as 'latest' for cache reuse on next build
-          docker tag \
-            "${{ steps.image-uri.outputs.image_uri }}" \
-            "${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest"
-          docker push "${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest"
-
-      - name: Export image URI to job output
-        run: |
-          echo "image_uri=${{ steps.image-uri.outputs.image_uri }}" >> "$GITHUB_OUTPUT"
-        id: final-meta
-
-  # ──────────────────────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────────────
   terraform:
-  # ──────────────────────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────────────
     name: Terraform Apply
     runs-on: ubuntu-latest
     needs: build-and-push
-    environment: production   # optional: requires manual approval in GitHub
+    outputs:
+      cloudfront_domain: ${{ steps.tf-outputs.outputs.cloudfront_domain }}
 
     steps:
       - uses: actions/checkout@v4
@@ -109,10 +101,7 @@ jobs:
 
       - name: Terraform init
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: |
-          terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="region=${{ env.AWS_REGION }}"
+        run: terraform init
 
       - name: Terraform plan
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -129,16 +118,16 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
 
-      - name: Export CloudFront domain
-        working-directory: ${{ env.TF_WORKING_DIR }}
+      - name: Capture CloudFront domain
         id: tf-outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          CF_DOMAIN=$(terraform output -raw cloudfront_domain)
-          echo "cloudfront_domain=${CF_DOMAIN}" >> "$GITHUB_OUTPUT"
+          CF=$(terraform output -raw cloudfront_domain)
+          echo "cloudfront_domain=${CF}" >> "$GITHUB_OUTPUT"
 
-  # ──────────────────────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────────────
   deploy:
-  # ──────────────────────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────────────
     name: ECS Rollout & Smoke Test
     runs-on: ubuntu-latest
     needs: [build-and-push, terraform]
@@ -164,15 +153,14 @@ jobs:
             --cluster "${{ env.ECS_CLUSTER }}" \
             --services "${{ env.ECS_SERVICE }}"
 
-      - name: Smoke test — /version matches deployed SHA
+      - name: Smoke test — /version must match deployed SHA
         env:
-          CF_DOMAIN:   ${{ needs.terraform.outputs.cloudfront_domain }}
+          CF_DOMAIN:    ${{ needs.terraform.outputs.cloudfront_domain }}
           EXPECTED_SHA: ${{ needs.build-and-push.outputs.git_sha }}
         run: |
           set -euo pipefail
           URL="https://${CF_DOMAIN}/version"
           echo "Checking ${URL}"
-          # CloudFront can take a moment; retry up to 5 times
           for i in $(seq 1 5); do
             ACTUAL=$(curl -sf "${URL}" | python3 -c "import sys,json; print(json.load(sys.stdin)['git_sha'])")
             echo "Attempt ${i}: got git_sha=${ACTUAL}"
@@ -180,7 +168,7 @@ jobs:
               echo "✓ Deployed SHA matches"
               exit 0
             fi
-            sleep 10
+            sleep 15
           done
-          echo "✗ Deployed SHA ${ACTUAL} != expected ${EXPECTED_SHA}"
+          echo "✗ SHA mismatch: got ${ACTUAL}, expected ${EXPECTED_SHA}"
           exit 1

@@ -88,6 +88,3 @@ resource "aws_iam_role_policy_attachment" "task_logs" {
   role       = aws_iam_role.task.name
   policy_arn = aws_iam_policy.task_logs.arn
 }
-
-output "task_execution_role_arn" { value = aws_iam_role.execution.arn }
-output "task_role_arn"           { value = aws_iam_role.task.arn }

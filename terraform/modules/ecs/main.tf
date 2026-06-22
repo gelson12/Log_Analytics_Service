@@ -163,10 +163,11 @@ resource "aws_ecs_task_definition" "this" {
       startPeriod = 10
     }
 
-    # Hard limit matches the problem statement: container has 256 MB limit
-    # (We allocate 512 MB task memory but constrain the container to 256 MB
-    #  to prove the streaming implementation handles 500 MB files within it)
-    memoryReservation = var.memory / 2
+    # Hard memory limit matches the spec: container must handle 500 MB files
+    # within 256 MB RSS (proven by test_streaming.py).
+    # Task memory is 512 MB to give the ECS agent headroom above the container.
+    memory            = var.memory / 2  # hard limit: container OOM-killed if exceeded
+    memoryReservation = var.memory / 2  # soft limit: used for scheduling
   }])
 }
 
@@ -209,7 +210,3 @@ resource "aws_ecs_service" "this" {
 
   depends_on = [aws_lb_listener.http]
 }
-
-output "alb_dns_name" { value = aws_lb.this.dns_name }
-output "cluster_name" { value = aws_ecs_cluster.this.name }
-output "service_name" { value = aws_ecs_service.this.name }
