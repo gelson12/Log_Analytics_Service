@@ -7,14 +7,10 @@
 #   3. Force new ECS deployment
 #   4. Smoke-test /version to confirm rollout
 #
-# Auth: OIDC — GitHub Actions assumes an IAM role directly.
-# No long-lived AWS keys stored anywhere.
+# Auth: OIDC — no long-lived AWS keys stored anywhere.
 # Required GitHub secrets:
-#   AWS_DEPLOY_ROLE_ARN   — IAM role ARN with OIDC trust for this repo/branch
-#   VPC_ID                — target VPC
-#   PUBLIC_SUBNET_IDS     — JSON list e.g. '["subnet-aaa","subnet-bbb"]'
-#   PRIVATE_SUBNET_IDS    — JSON list e.g. '["subnet-ccc","subnet-ddd"]'
-#   LOG_BUCKETS           — JSON list e.g. '["my-log-bucket"]'
+#   AWS_DEPLOY_ROLE_ARN  — IAM role ARN with OIDC trust for this repo
+#   LOG_BUCKETS          — JSON list e.g. '["base-platform-logs-s3-22-06"]'
 ################################################################################
 
 name: CD
@@ -25,7 +21,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # required for OIDC token exchange with AWS
+  id-token: write
 
 env:
   AWS_REGION:     eu-west-1
@@ -51,7 +47,6 @@ jobs:
         run: |
           SHA_SHORT="${GITHUB_SHA::8}"
           echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
-          echo "Tagging image: ${SHA_SHORT}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -108,9 +103,6 @@ jobs:
         run: |
           terraform plan \
             -var="image_tag=${{ needs.build-and-push.outputs.git_sha }}" \
-            -var="vpc_id=${{ secrets.VPC_ID }}" \
-            -var="public_subnet_ids=${{ secrets.PUBLIC_SUBNET_IDS }}" \
-            -var="private_subnet_ids=${{ secrets.PRIVATE_SUBNET_IDS }}" \
             -var='log_buckets=${{ secrets.LOG_BUCKETS }}' \
             -out=tfplan
 
@@ -165,10 +157,10 @@ jobs:
             ACTUAL=$(curl -sf "${URL}" | python3 -c "import sys,json; print(json.load(sys.stdin)['git_sha'])")
             echo "Attempt ${i}: got git_sha=${ACTUAL}"
             if [ "${ACTUAL}" = "${EXPECTED_SHA}" ]; then
-              echo "✓ Deployed SHA matches"
+              echo "Deployed SHA matches"
               exit 0
             fi
             sleep 15
           done
-          echo "✗ SHA mismatch: got ${ACTUAL}, expected ${EXPECTED_SHA}"
+          echo "SHA mismatch: got ${ACTUAL}, expected ${EXPECTED_SHA}"
           exit 1

@@ -5,29 +5,15 @@ variable "aws_region" {
 }
 
 variable "environment" {
-  description = "Deployment environment label (prod, staging …)."
+  description = "Deployment environment label."
   type        = string
   default     = "prod"
-}
-
-variable "vpc_id" {
-  description = "VPC in which the ECS service will run."
-  type        = string
-}
-
-variable "public_subnet_ids" {
-  description = "Public subnets for the ALB."
-  type        = list(string)
-}
-
-variable "private_subnet_ids" {
-  description = "Private subnets for the ECS tasks."
-  type        = list(string)
 }
 
 variable "log_buckets" {
   description = "S3 buckets the service is allowed to read logs from."
   type        = list(string)
+  default     = ["base-platform-logs-s3-22-06"]
 }
 
 variable "image_tag" {

@@ -1,7 +1,5 @@
 ################################################################################
 # environments/prod/main.tf
-#
-# Wires together all modules.
 ################################################################################
 
 terraform {
@@ -14,7 +12,6 @@ terraform {
     }
   }
 
-  # Remote state — bucket + table created once by infra/bootstrap.tf
   backend "s3" {
     bucket         = "log-analytics-tfstate-950916120579"
     key            = "prod/terraform.tfstate"
@@ -37,10 +34,20 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
 
 ################################################################################
-# ECR — image registry
+# VPC — creates networking from scratch (no default VPC in this account)
+################################################################################
+
+module "vpc" {
+  source = "../../modules/vpc"
+
+  name        = "log-analytics"
+  environment = var.environment
+}
+
+################################################################################
+# ECR
 ################################################################################
 
 module "ecr" {
@@ -51,7 +58,7 @@ module "ecr" {
 }
 
 ################################################################################
-# IAM — task execution role + least-privilege task role
+# IAM
 ################################################################################
 
 module "iam" {
@@ -65,7 +72,7 @@ module "iam" {
 }
 
 ################################################################################
-# ECS Fargate service + ALB
+# ECS Fargate + ALB
 ################################################################################
 
 module "ecs" {
@@ -74,24 +81,24 @@ module "ecs" {
   name               = "log-analytics"
   environment        = var.environment
   aws_region         = var.aws_region
-  vpc_id             = var.vpc_id
-  public_subnet_ids  = var.public_subnet_ids
-  private_subnet_ids = var.private_subnet_ids
+  vpc_id             = module.vpc.vpc_id
+  public_subnet_ids  = module.vpc.public_subnet_ids
+  private_subnet_ids = module.vpc.private_subnet_ids
 
   ecr_image_uri           = "${module.ecr.repository_url}:${var.image_tag}"
   task_execution_role_arn = module.iam.task_execution_role_arn
   task_role_arn           = module.iam.task_role_arn
 
   container_port = 8000
-  cpu            = 256  # 0.25 vCPU
-  memory         = 512  # container reservation is 256 MB (set in ecs module)
+  cpu            = 256
+  memory         = 512
   desired_count  = 2
   log_bucket     = var.log_buckets[0]
   git_sha        = var.image_tag
 }
 
 ################################################################################
-# CloudFront — in front of ALB
+# CloudFront
 ################################################################################
 
 module "cloudfront" {
