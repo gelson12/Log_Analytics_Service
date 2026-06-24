@@ -16,7 +16,7 @@ terraform {
 
   # Remote state — bucket + table created once by infra/bootstrap.tf
   backend "s3" {
-    bucket         = "log-analytics-tfstate-206453958024"
+    bucket         = "log-analytics-tfstate-950916120579"
     key            = "prod/terraform.tfstate"
     region         = "eu-west-1"
     encrypt        = true

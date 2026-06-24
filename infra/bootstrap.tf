@@ -22,7 +22,7 @@ provider "aws" {
 }
 
 variable "aws_region"   { default = "eu-west-1" }
-variable "state_bucket" { default = "log-analytics-tfstate-206453958024" }
+variable "state_bucket" { default = "log-analytics-tfstate-950916120579" }
 variable "lock_table"   { default = "log-analytics-tfstate-lock" }
 
 resource "aws_s3_bucket" "tfstate" {
