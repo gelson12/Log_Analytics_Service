@@ -60,17 +60,13 @@ jobs:
 
       - name: Build & push Docker image
         env:
-          IMAGE_URI:  ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.meta.outputs.sha_short }}
-          LATEST_URI: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:latest
+          IMAGE_URI: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO }}:${{ steps.meta.outputs.sha_short }}
         run: |
           docker build \
             --build-arg GIT_SHA="${{ steps.meta.outputs.sha_short }}" \
             --tag "$IMAGE_URI" \
-            --tag "$LATEST_URI" \
-            --cache-from "$LATEST_URI" \
             .
           docker push "$IMAGE_URI"
-          docker push "$LATEST_URI"
 
   # ────────────────────────────────────────────────────────────────────────────
   terraform:
