@@ -68,6 +68,7 @@ resource "aws_lb" "this" {
   subnets            = var.public_subnet_ids
 
   enable_deletion_protection = false   # flip to true in long-lived prod
+  idle_timeout               = 200     # must exceed CloudFront origin_read_timeout
 }
 
 resource "aws_lb_target_group" "this" {

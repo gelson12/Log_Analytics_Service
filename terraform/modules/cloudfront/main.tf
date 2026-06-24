@@ -13,10 +13,12 @@ resource "aws_cloudfront_distribution" "this" {
     origin_id   = "alb"
 
     custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "http-only" # ALB listener is HTTP; CloudFront terminates TLS
-      origin_ssl_protocols   = ["TLSv1.2"]
+      http_port                = 80
+      https_port               = 443
+      origin_protocol_policy   = "http-only" # ALB listener is HTTP; CloudFront terminates TLS
+      origin_ssl_protocols     = ["TLSv1.2"]
+      origin_read_timeout      = 180  # 3 minutes — allows 500MB streaming analysis
+      origin_keepalive_timeout = 60
     }
   }
 
